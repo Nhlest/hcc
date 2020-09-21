@@ -1,0 +1,27 @@
+name:                wcc-parser
+version:             0.1.0.0
+github:              "Nhlest/wcc-parser"
+license:             MIT
+author:              "N`hlest"
+maintainer:          "flutterlice@gmail.com"
+copyright:           "2020 N`hlest"
+
+extra-source-files:
+- README.md
+
+description:         WASM C(?) Compiler
+
+dependencies:
+- base >= 4.7 && < 5
+- parsec
+- text
+
+executables:
+  haskek-esque-exe:
+    main:                Main.hs
+    source-dirs:         src
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies: []
