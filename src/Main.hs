@@ -54,7 +54,8 @@ data Statement = STLocalVarDef TypedVariable (Maybe Expression)
 data Block = Block [Statement]
  deriving Show
 
-data FuncDef = FuncDef {
+data FuncDef = DummyToken Token
+  | FuncDef {
     _wccfdName :: String,
     _wccfdArgs :: [TypedVariable],
     _wccfdReturnType :: Type,
@@ -94,10 +95,8 @@ parseFile = do
        parseString "local"  = Local
        parseString s        = Symbol s
 
-data T = P Token | F FuncDef deriving Show
-
 tok p = tokenPrim show update_pos get where
-  get a = if p == a then Just (P p) else Nothing
+  get a = if p == a then Just (DummyToken p) else Nothing
 
 update_pos :: SourcePos -> Token -> [Token] -> SourcePos
 update_pos pos _ (tok:_) = setSourceLine (incSourceColumn pos 1) 0
@@ -111,22 +110,24 @@ parseType :: String -> Maybe Type
 parseType "i32" = Just TypeI32
 parseType _ = Nothing
 
-parseTokens :: GenParser Token st [T]
+parseTokens :: GenParser Token st [FuncDef]
 parseTokens = do 
   many $ do
-    tok Func        <?> "func token"
-    nam <- gtok        <?> "func name after `func` keyword"
-    tok OBracket    <?> "opening bracket after func name"
+    tok Func          <?> "func token"
+    nam <- gtok       <?> "func name after `func` keyword"
+    tok OBracket      <?> "opening bracket after func name"
     vars <- many $ do
-      argname <- gtok  <?> "argument name"
-      tok Colon     <?> "colon after argument name"
+      argname <- gtok <?> "argument name"
+      tok Colon       <?> "colon after argument name"
       argType <- fromJust <$> parseType <$> gtok 
-                       <?> "argument type after colon"
+                      <?> "argument type after colon"
       pure $ TypedVariable argType $ VarName argname
-    tok CBracket    <?> "closing bracket after argument list"
-    tok Colon       <?> "colon after argument list"
+    tok CBracket      <?> "closing bracket after argument list"
+    tok Colon         <?> "colon after argument list"
     retType <- fromJust <$> parseType <$> gtok
-    pure $ F $ FuncDef nam vars retType (Block [])
+    between (tok OCurlyBracket) (tok CCurlyBracket) $ do 
+      pure ()
+    pure $ FuncDef nam vars retType (Block [])
 
 main = do
   res <- parse parseFile "" <$> Text.unpack <$> Text.readFile "fib.wc"
