@@ -193,7 +193,7 @@ tryParseSum left = do
 tryParseComparisson left = do
   tok Greater
   expr <- tryParseExpression
-  pure $ EXSum left expr
+  pure $ EXCmpGreater left expr
 
 tryParseValue = do
   number <- ntok
