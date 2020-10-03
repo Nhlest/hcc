@@ -12,7 +12,7 @@ data Token = Func
               | While
               | Local
               | Numeric Int
-              | Newline
+              | Semicolon
               | Minus
               | Plus
               | Greater
@@ -67,7 +67,7 @@ data FuncDef = DummyToken Token
 parseFile :: GenParser Char st [Token]
 parseFile = do
   (flip manyTill) eof $ do
-    skipMany $ oneOf " \t"
+    skipMany $ oneOf " \t\n"
     attemptDigit 
       <|> (parseString <$> attemptString)
       <|> attemptSymbol
@@ -78,7 +78,7 @@ parseFile = do
        attemptString = do
          many1 alphaNum
        attemptSymbol = do
-            try (string "\n") $> Newline
+            try (string ";") $> Semicolon
         <|> try (string "-=") $> MinusEquals
         <|> try (string "-" ) $> Minus
         <|> try (string "+=") $> PlusEquals
@@ -116,11 +116,6 @@ parseType :: String -> Type
 parseType "i32" = TypeI32
 parseType _ = error "TypeParsingErrorStub" -- FIXME: please
 
-allowNewLine :: ParsecT [Token] u Identity FuncDef
-allowNewLine = do
-  many $ tok Newline
-  pure $ DummyToken Newline
-
 parseTokens :: GenParser Token st [FuncDef]
 parseTokens = do 
   many $ do
@@ -142,7 +137,6 @@ parseTokens = do
     pure $ FuncDef nam vars retType (Block statements)
 
 parseStatement = do
-  allowNewLine
   try $ tryParseLocalVarDef
   <|> tryParseWhileLoop
   <|> try tryParseAssignment
@@ -157,7 +151,7 @@ tryParseLocalVarDef = do
   expr <- try (do
     tok Equals
     Just <$> tryParseExpression) <|> pure Nothing
-  tok Newline
+  tok Semicolon
   pure $ STLocalVarDef (TypedVariable typename (VarName varname)) expr
 
 tryParseWhileLoop = do
@@ -166,26 +160,25 @@ tryParseWhileLoop = do
   expr <- tryParseExpression
   tok CBracket
   statements <- (between (tok OCurlyBracket) (tok CCurlyBracket) $ many parseStatement)
-  tok Newline
   pure $ STWhileLoop expr $ Block statements
 
 tryParseAssignment = do
   destname <- gtok
   tok Equals
   expr <- tryParseExpression
-  tok Newline
+  tok Semicolon
   pure $ STAssignment (VarName destname) expr
 
 tryParseSubstractAssignment = do
   destname <- gtok
   tok MinusEquals
   expr <- tryParseExpression
-  tok Newline
+  tok Semicolon
   pure $ STSubtractAssignment (VarName destname) expr
 
 tryParseSTExpression = do
   expr <- tryParseExpression
-  tok Newline
+  tok Semicolon
   pure $ STExpression expr
 
 tryParseExpression = do
