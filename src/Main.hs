@@ -5,8 +5,8 @@ import Text.Parsec (ParsecT)
 import qualified Data.Text    as Text 
 import qualified Data.Text.IO as Text 
 import Data.Functor
+import qualified Data.Map as M
 import Data.Maybe
-import Control.Monad.Identity
 
 data Token = Func
               | While
@@ -31,8 +31,11 @@ data Token = Func
 data Type = TypeI32
  deriving Show
 
+sizeOfT :: Type -> Int
+sizeOfT TypeI32 = 4
+
 newtype VarName = VarName String
- deriving Show
+ deriving (Show, Eq, Ord)
 
 data TypedVariable = TypedVariable Type VarName 
  deriving Show
@@ -78,7 +81,7 @@ parseFile = do
        attemptString = do
          many1 alphaNum
        attemptSymbol = do
-            try (string ";") $> Semicolon
+            try (string ";" ) $> Semicolon
         <|> try (string "-=") $> MinusEquals
         <|> try (string "-" ) $> Minus
         <|> try (string "+=") $> PlusEquals
@@ -203,13 +206,79 @@ tryParseVariable = do
   varname <- gtok
   pure $ EXVariable (VarName varname)
 
+
+translateToAsm :: [FuncDef] -> String
+translateToAsm [] = ""
+translateToAsm ((FuncDef fname (TypedVariable itype iname:ts) rettype (Block codeblock)):xs) = 
+  "  .globl " <> fname <> "\n" <> fname <> ":\n" <> "  pushq %rbp\n" <> "  movq  %rsp, %rbp\n" <> "  movl  %edi, -" <> show isize <> "(%rbp)\n"
+  <> (translateFuncToAsm (M.insert iname (VarLocation isize (-isize)) M.empty) codeblock isize (-isize) 1) -- Add input variables onto the stack and into the map, pass correct return type size 
+  <> "  popq  %rbp\n  ret\n"
+ where isize = sizeOfT itype
+data VarLocation = VarLocation {
+    _varSize :: Int,
+    _varOffset :: Int
+  }
+
+calcExprInAX :: M.Map VarName VarLocation -> Expression -> String
+calcExprInAX _ (EXValue (VInt v)) = "  movl  $" <> show v <> ", %eax\n"
+calcExprInAX varMap (EXVariable vnam) = "  movl  " <> show l <> "(%rbp), %eax\n"
+ where (VarLocation _ l) = fromJust $ M.lookup vnam varMap
+calcExprInAX varMap (EXSum exl exr) = 
+  calcExprInAX varMap exr
+  <> "  movl  %eax, %ebx\n"
+  <> calcExprInAX varMap exl
+  <> "  addl  %ebx, %eax\n"
+calcExprInAX varMap (EXCmpGreater exl exr) = 
+  calcExprInAX varMap exr 
+  <> "  movl  %eax, %ebx\n"
+  <> calcExprInAX varMap exl
+  <> "  subl  %ebx, %eax\n"
+-- calcExprInAX _ _ = "  TBD <statement>\n"
+
+translateFuncToAsm :: M.Map VarName VarLocation -> [Statement] -> Int -> Int -> Int -> String
+translateFuncToAsm varMap [] retsize sp label = ""
+translateFuncToAsm varMap ((STLocalVarDef (TypedVariable vartype varname) Nothing):xs) retsize sp label = 
+  "  movl  $0,  " <> show newsp <> "(%rbp)\n"
+  <> translateFuncToAsm (M.insert varname (VarLocation (sizeOfT vartype) newsp) varMap) xs retsize newsp label
+ where newsp = sp - (sizeOfT vartype)
+translateFuncToAsm varMap ((STLocalVarDef (TypedVariable vartype varname) (Just expr)):xs) retsize sp label = 
+  calcExprInAX varMap expr
+  <> "  movl  %eax,  " <> show newsp <> "(%rbp)\n" -- TODO: size suffix
+  <> translateFuncToAsm (M.insert varname (VarLocation (sizeOfT vartype) newsp) varMap) xs retsize newsp label
+ where newsp = sp - (sizeOfT vartype)
+translateFuncToAsm varMap ((STWhileLoop expr (Block b)):xs) retsize sp label = 
+  "  jmp   .L" <> show label <> "\n"
+  <> ".L" <> show (label + 1) <> ":\n"
+  <> translateFuncToAsm varMap b retsize sp (label + 2)
+  <> ".L" <> show label <> ":\n"
+  <> calcExprInAX varMap expr
+  <> "  cmpl  $0,  %eax\n"
+  <> "  jg   .L" <> show (label + 1) <> "\n" 
+  <> translateFuncToAsm varMap xs retsize sp (label + 2)
+translateFuncToAsm varMap (STAssignment vnam expr:xs) retsize sp label = 
+  calcExprInAX varMap expr
+  <> "  movl  %eax, " <> show l <> "(%rbp)\n"
+  <> translateFuncToAsm varMap xs retsize sp label
+ where (VarLocation _ l) = fromJust $ M.lookup vnam varMap
+translateFuncToAsm varMap (STSubtractAssignment vnam expr:xs) retsize sp label = 
+  calcExprInAX varMap expr
+  <> "  subl  %eax, " <> show l <> "(%rbp)\n"
+  <> translateFuncToAsm varMap xs retsize sp label
+ where (VarLocation _ l) = fromJust $ M.lookup vnam varMap
+translateFuncToAsm varMap (STExpression expr:xs) retsize sp label = 
+  calcExprInAX varMap expr
+  <> translateFuncToAsm varMap xs retsize sp label
+-- translateFuncToAsm varMap (x:xs) retsize sp label = 
+--   "  TBD <instruction>\n"
+--   <> translateFuncToAsm varMap xs retsize sp label
+
 main = do
   res <- parse parseFile "" <$> Text.unpack <$> Text.readFile "fib.wc"
   case res of
     Left l -> print l
     Right r -> do
-      print r
       let parsed_res = parse parseTokens "" r
       case parsed_res of
         Left l -> print l
-        Right r -> print r
+        Right r -> do
+          putStrLn $ translateToAsm r
