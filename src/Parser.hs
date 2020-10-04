@@ -1,7 +1,7 @@
 module Parser (tokenizeHCC, parseHCCTokens) where
 
-import qualified Data.Text    as Text 
-import qualified Data.Text.IO as Text 
+import qualified Data.Text    as Text
+import qualified Data.Text.IO as Text
 import Text.ParserCombinators.Parsec
 import Text.Parsec (ParsecT)
 import Data.Functor
@@ -12,7 +12,7 @@ parseFile :: GenParser Char st [Token]
 parseFile = do
   (flip manyTill) eof $ do
     skipMany $ oneOf " \t\n"
-    attemptDigit 
+    attemptDigit
       <|> (parseString <$> attemptString)
       <|> attemptSymbol
       <|> eof $> EOF
@@ -63,7 +63,7 @@ parseType "i64" = TypeI64
 parseType _ = error "TypeParsingErrorStub" -- FIXME: please
 
 parseTokens :: GenParser Token st [FuncDef]
-parseTokens = do 
+parseTokens = do
   many $ do
     tok Func          <?> "func token"
     nam <- gtok       <?> "func name after `func` keyword"

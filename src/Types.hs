@@ -29,7 +29,7 @@ data Type = TypeI32 | TypeI64
 newtype VarName = VarName String
  deriving (Show, Eq, Ord)
 
-data TypedVariable = TypedVariable Type VarName 
+data TypedVariable = TypedVariable Type VarName
  deriving Show
 
 data Value = VInt Int
@@ -62,26 +62,26 @@ data FuncDef = DummyToken Token
     _hccfdBody :: Block
   } deriving Show
 
-data ASMRegister = 
+data ASMRegister =
     AX
   | BX
   | DX
   | BP
   | SP
   | DI
-  
+
 data ASMRegSize =
     QWORD
   | DWORD
   | WORD
   | BYTE
 
-data ASMData = 
+data ASMData =
     REG ASMRegSize ASMRegister
   | VAL Value
   | REL ASMRegSize ASMRegister Int
 
-data ASMInstruction = 
+data ASMInstruction =
     MOV  ASMData ASMData
   | PUSH ASMData
   | JMP  String
@@ -115,16 +115,16 @@ instance Show ASMData where
   show (REL size reg off) = show off <> "(" <> show (REG size reg) <> ")"
 
 instance Show ASMInstruction where
-  show (MOV  a b) = "  mov"  <> getSizeSuffix2 a b <> "  " <> show a <> ", " <> show b <> "\n" 
-  show (PUSH a)   = "  push" <> getSizeSuffix1 a   <> " "  <> show a <> "\n" 
-  show (JMP   s)  = "  jmp"  <> "  "  <> s <> "\n" 
-  show (ADD  a b) = "  add"  <> getSizeSuffix2 a b <> "  " <> show a <> ", " <> show b <> "\n" 
-  show (MUL  a) = "  mul"  <> getSizeSuffix1 a <> "  " <> show a <> "\n" 
-  show (SUB  a b) = "  sub"  <> getSizeSuffix2 a b <> "  " <> show a <> ", " <> show b <> "\n" 
-  show (JG   s)   = "  jg"   <> "   " <> s <> "\n" 
-  show (CMP  a b) = "  cmp"  <> getSizeSuffix2 a b <> "  " <> show a <> ", " <> show b <> "\n" 
-  show (POP  a)   = "  pop"  <> getSizeSuffix1 a   <> "  "  <> show a <> "\n" 
-  show (RET)      = "  ret\n" 
+  show (MOV  a b) = "  mov"  <> getSizeSuffix2 a b <> "  " <> show a <> ", " <> show b <> "\n"
+  show (PUSH a)   = "  push" <> getSizeSuffix1 a   <> " "  <> show a <> "\n"
+  show (JMP   s)  = "  jmp"  <> "  "  <> s <> "\n"
+  show (ADD  a b) = "  add"  <> getSizeSuffix2 a b <> "  " <> show a <> ", " <> show b <> "\n"
+  show (MUL  a) = "  mul"  <> getSizeSuffix1 a <> "  " <> show a <> "\n"
+  show (SUB  a b) = "  sub"  <> getSizeSuffix2 a b <> "  " <> show a <> ", " <> show b <> "\n"
+  show (JG   s)   = "  jg"   <> "   " <> s <> "\n"
+  show (CMP  a b) = "  cmp"  <> getSizeSuffix2 a b <> "  " <> show a <> ", " <> show b <> "\n"
+  show (POP  a)   = "  pop"  <> getSizeSuffix1 a   <> "  "  <> show a <> "\n"
+  show (RET)      = "  ret\n"
   show (LABEL s)  = s <> ":\n"
   show (DIRECTIVE s) = "  ." <> s <> "\n"
 
@@ -138,10 +138,10 @@ getSizeSuffix (REG DWORD _)   = Just "l"
 getSizeSuffix (REG WORD  _)   = Just "w"
 getSizeSuffix (REG BYTE  _)   = Just "b"
 getSizeSuffix (VAL (VInt _))  = Just "l"
-getSizeSuffix (REL _ _ _)     = Nothing 
+getSizeSuffix (REL _ _ _)     = Nothing
 
 getSizeSuffix1 :: ASMData -> String
-getSizeSuffix1 = fromJust . getSizeSuffix 
+getSizeSuffix1 = fromJust . getSizeSuffix
 
 getSizeSuffix2 :: ASMData -> ASMData -> String
 getSizeSuffix2 a b = case fa of
