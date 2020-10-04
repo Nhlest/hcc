@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: b935d451f2e975a99a9ebf06ef0f53a0f81b7b837f8315b8df6c01642d50e3bc
+-- hash: 21fc96371049af4e7998b0753a91d42c45c993c95be5a8e9bf28677588825b79
 
 name:           wcc-parser
 version:        0.1.0.0
@@ -27,6 +27,9 @@ source-repository head
 executable haskek-esque-exe
   main-is: Main.hs
   other-modules:
+      Parser
+      Translator
+      Types
       Paths_wcc_parser
   hs-source-dirs:
       src
