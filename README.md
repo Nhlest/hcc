@@ -1,4 +1,4 @@
-# WCC (full name tbd)
+# HCC - The Haskell Cool Compiler
 
 ## Usage:
 

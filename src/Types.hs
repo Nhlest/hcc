@@ -54,10 +54,10 @@ data Block = Block [Statement]
 
 data FuncDef = DummyToken Token
   | FuncDef {
-    _wccfdName :: String,
-    _wccfdArgs :: [TypedVariable],
-    _wccfdReturnType :: Type,
-    _wccfdBody :: Block
+    _hccfdName :: String,
+    _hccfdArgs :: [TypedVariable],
+    _hccfdReturnType :: Type,
+    _hccfdBody :: Block
   } deriving Show
 
 data ASMRegister = 

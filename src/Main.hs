@@ -2,14 +2,14 @@ module Main where
 
 import qualified Data.Map as M
 
-import Parser ( tokenizeWCC, parseWCCTokens )
+import Parser ( tokenizeHCC, parseHCCTokens )
 import Translator ( translateToAsm )
 
 main = do
-  res <- tokenizeWCC "fib.wc"
+  res <- tokenizeHCC "fib.hc"
   either 
     ( fail . show ) 
     ( either 
       ( fail . show ) 
-      ( putStrLn . concat . map show . translateToAsm ) . parseWCCTokens
+      ( putStrLn . concat . map show . translateToAsm ) . parseHCCTokens
     ) res

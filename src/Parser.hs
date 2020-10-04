@@ -1,4 +1,4 @@
-module Parser (tokenizeWCC, parseWCCTokens) where
+module Parser (tokenizeHCC, parseHCCTokens) where
 
 import qualified Data.Text    as Text 
 import qualified Data.Text.IO as Text 
@@ -147,6 +147,6 @@ tryParseVariable = do
   varname <- gtok
   pure $ EXVariable (VarName varname)
 
-tokenizeWCC path = parse parseFile "" <$> Text.unpack <$> Text.readFile path
+tokenizeHCC path = parse parseFile "" <$> Text.unpack <$> Text.readFile path
 
-parseWCCTokens = parse parseTokens ""
+parseHCCTokens = parse parseTokens ""
