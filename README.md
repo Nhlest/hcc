@@ -17,4 +17,4 @@ int main(int a) {
 ```
 `gcc main.c a.s && ./a.out`
 
-Get confirm that the output result is indeed `55`
+Confirm that the output result is indeed `55`
