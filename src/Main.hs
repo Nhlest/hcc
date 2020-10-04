@@ -210,9 +210,10 @@ tryParseVariable = do
 translateToAsm :: [FuncDef] -> String
 translateToAsm [] = ""
 translateToAsm ((FuncDef fname (TypedVariable itype iname:ts) rettype (Block codeblock)):xs) = 
-  "  .globl " <> fname <> "\n" <> fname <> ":\n" <> "  pushq %rbp\n" <> "  movq  %rsp, %rbp\n" <> "  movl  %edi, -" <> show isize <> "(%rbp)\n"
-  <> (translateFuncToAsm (M.insert iname (VarLocation isize (-isize)) M.empty) codeblock isize (-isize) 1) -- Add input variables onto the stack and into the map, pass correct return type size 
-  <> "  popq  %rbp\n  ret\n"
+  "  .globl " <> fname <> "\n" <> fname <> ":\n" <> "  pushq %rbp\n  pushq %rbx\n" <> "  movq  %rsp, %rbp\n" <> "  movl  %edi, -" <> show isize <> "(%rbp)\n"
+  <> (translateFuncToAsm (M.insert iname (VarLocation isize (-isize)) M.empty) codeblock fname isize (-isize) 1) -- Add input variables onto the stack and into the map, pass correct return type size 
+  <> "  popq  %rbx\n  popq  %rbp\n  ret\n"
+  <> translateToAsm xs
  where isize = sizeOfT itype
 data VarLocation = VarLocation {
     _varSize :: Int,
@@ -235,39 +236,39 @@ calcExprInAX varMap (EXCmpGreater exl exr) =
   <> "  subl  %ebx, %eax\n"
 -- calcExprInAX _ _ = "  TBD <statement>\n"
 
-translateFuncToAsm :: M.Map VarName VarLocation -> [Statement] -> Int -> Int -> Int -> String
-translateFuncToAsm varMap [] retsize sp label = ""
-translateFuncToAsm varMap ((STLocalVarDef (TypedVariable vartype varname) Nothing):xs) retsize sp label = 
+translateFuncToAsm :: M.Map VarName VarLocation -> [Statement] -> String -> Int -> Int -> Int -> String
+translateFuncToAsm varMap [] fname retsize sp label = ""
+translateFuncToAsm varMap ((STLocalVarDef (TypedVariable vartype varname) Nothing):xs) fname retsize sp label = 
   "  movl  $0,  " <> show newsp <> "(%rbp)\n"
-  <> translateFuncToAsm (M.insert varname (VarLocation (sizeOfT vartype) newsp) varMap) xs retsize newsp label
+  <> translateFuncToAsm (M.insert varname (VarLocation (sizeOfT vartype) newsp) varMap) xs fname retsize newsp label
  where newsp = sp - (sizeOfT vartype)
-translateFuncToAsm varMap ((STLocalVarDef (TypedVariable vartype varname) (Just expr)):xs) retsize sp label = 
+translateFuncToAsm varMap ((STLocalVarDef (TypedVariable vartype varname) (Just expr)):xs) fname retsize sp label = 
   calcExprInAX varMap expr
   <> "  movl  %eax,  " <> show newsp <> "(%rbp)\n" -- TODO: size suffix
-  <> translateFuncToAsm (M.insert varname (VarLocation (sizeOfT vartype) newsp) varMap) xs retsize newsp label
+  <> translateFuncToAsm (M.insert varname (VarLocation (sizeOfT vartype) newsp) varMap) xs fname retsize newsp label
  where newsp = sp - (sizeOfT vartype)
-translateFuncToAsm varMap ((STWhileLoop expr (Block b)):xs) retsize sp label = 
-  "  jmp   .L" <> show label <> "\n"
-  <> ".L" <> show (label + 1) <> ":\n"
-  <> translateFuncToAsm varMap b retsize sp (label + 2)
-  <> ".L" <> show label <> ":\n"
+translateFuncToAsm varMap ((STWhileLoop expr (Block b)):xs) fname retsize sp label = 
+  "  jmp   .L" <> fname <> show label <> "\n"
+  <> ".L" <> fname <> show (label + 1) <> ":\n"
+  <> translateFuncToAsm varMap b fname retsize sp (label + 2)
+  <> ".L" <> fname <> show label <> ":\n"
   <> calcExprInAX varMap expr
   <> "  cmpl  $0,  %eax\n"
-  <> "  jg   .L" <> show (label + 1) <> "\n" 
-  <> translateFuncToAsm varMap xs retsize sp (label + 2)
-translateFuncToAsm varMap (STAssignment vnam expr:xs) retsize sp label = 
+  <> "  jg   .L" <> fname <> show (label + 1) <> "\n" 
+  <> translateFuncToAsm varMap xs fname retsize sp (label + 2)
+translateFuncToAsm varMap (STAssignment vnam expr:xs) fname retsize sp label = 
   calcExprInAX varMap expr
   <> "  movl  %eax, " <> show l <> "(%rbp)\n"
-  <> translateFuncToAsm varMap xs retsize sp label
+  <> translateFuncToAsm varMap xs fname retsize sp label
  where (VarLocation _ l) = fromJust $ M.lookup vnam varMap
-translateFuncToAsm varMap (STSubtractAssignment vnam expr:xs) retsize sp label = 
+translateFuncToAsm varMap (STSubtractAssignment vnam expr:xs) fname retsize sp label = 
   calcExprInAX varMap expr
   <> "  subl  %eax, " <> show l <> "(%rbp)\n"
-  <> translateFuncToAsm varMap xs retsize sp label
+  <> translateFuncToAsm varMap xs fname retsize sp label
  where (VarLocation _ l) = fromJust $ M.lookup vnam varMap
-translateFuncToAsm varMap (STExpression expr:xs) retsize sp label = 
+translateFuncToAsm varMap (STExpression expr:xs) fname retsize sp label = 
   calcExprInAX varMap expr
-  <> translateFuncToAsm varMap xs retsize sp label
+  <> translateFuncToAsm varMap xs fname retsize sp label
 -- translateFuncToAsm varMap (x:xs) retsize sp label = 
 --   "  TBD <instruction>\n"
 --   <> translateFuncToAsm varMap xs retsize sp label
