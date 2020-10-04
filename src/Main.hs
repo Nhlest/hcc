@@ -41,7 +41,9 @@ data TypedVariable = TypedVariable Type VarName
  deriving Show
 
 data Value = VInt Int
- deriving Show
+
+instance Show Value where
+  show (VInt a) = show a
 
 data Expression = EXValue Value
                 | EXSum Expression Expression
@@ -66,6 +68,86 @@ data FuncDef = DummyToken Token
     _wccfdReturnType :: Type,
     _wccfdBody :: Block
   } deriving Show
+
+data ASMRegister = 
+    AX
+  | BX
+  | BP
+  | SP
+  | DI
+  
+data ASMRegSize =
+    QWORD
+  | DWORD
+  | WORD
+  | BYTE
+
+data ASMData = 
+    REG ASMRegSize ASMRegister
+  | VAL Value
+  | REL ASMRegSize ASMRegister Int
+
+data ASMInstruction = 
+    MOV  ASMData ASMData
+  | PUSH ASMData
+  | JMP  String
+  | ADD  ASMData ASMData
+  | SUB  ASMData ASMData
+  | JG   String
+  | CMP  ASMData ASMData
+  | POP  ASMData
+  | RET
+  | LABEL String
+  | DIRECTIVE String
+
+getSizeSuffix :: ASMData -> Maybe String
+getSizeSuffix (REG QWORD _)   = Just "q"
+getSizeSuffix (REG DWORD _)   = Just "l"
+getSizeSuffix (REG WORD  _)   = Just "w"
+getSizeSuffix (REG BYTE  _)   = Just "b"
+getSizeSuffix (VAL (VInt _))  = Just "l"
+getSizeSuffix (REL _ _ _)     = Nothing 
+
+getSizeSuffix1 :: ASMData -> String
+getSizeSuffix1 = fromJust . getSizeSuffix 
+
+getSizeSuffix2 :: ASMData -> ASMData -> String
+getSizeSuffix2 a b = case fa of
+   Just r -> r
+   Nothing -> fromJust fb
+ where fa = getSizeSuffix a
+       fb = getSizeSuffix b
+
+instance Show ASMRegSize where
+  show QWORD = "r"
+  show DWORD = "e"
+  show WORD = ""
+  show BYTE = error "not implemented"
+
+instance Show ASMRegister where
+  show AX = "ax"
+  show BX = "bx"
+  show BP = "bp"
+  show SP = "sp"
+  show DI = "di"
+
+instance Show ASMData where
+  show (REG size reg) = "%" <> show size <> show reg
+  show (VAL val) = "$" <> show val
+  show (REL size reg off) = show off <> "(" <> show (REG size reg) <> ")"
+
+instance Show ASMInstruction where
+  show (MOV  a b) = "  mov"  <> getSizeSuffix2 a b <> "  " <> show a <> ", " <> show b <> "\n" 
+  show (PUSH a)   = "  push" <> getSizeSuffix1 a   <> " "  <> show a <> "\n" 
+  show (JMP   s)  = "  jmp"  <> "  "  <> s <> "\n" 
+  show (ADD  a b) = "  add"  <> getSizeSuffix2 a b <> "  " <> show a <> ", " <> show b <> "\n" 
+  show (SUB  a b) = "  sub"  <> getSizeSuffix2 a b <> "  " <> show a <> ", " <> show b <> "\n" 
+  show (JG   s)   = "  jg"   <> "   " <> s <> "\n" 
+  show (CMP  a b) = "  cmp"  <> getSizeSuffix2 a b <> "  " <> show a <> ", " <> show b <> "\n" 
+  show (POP  a)   = "  pop"  <> getSizeSuffix1 a   <> "  "  <> show a <> "\n" 
+  show (RET)      = "  ret\n" 
+  show (LABEL s)  = s <> ":\n"
+  show (DIRECTIVE s) = "  ." <> s <> "\n"
 
 parseFile :: GenParser Char st [Token]
 parseFile = do
@@ -207,68 +289,78 @@ tryParseVariable = do
   pure $ EXVariable (VarName varname)
 
 
-translateToAsm :: [FuncDef] -> String
-translateToAsm [] = ""
+translateToAsm :: [FuncDef] -> [ASMInstruction]
+translateToAsm [] = []
 translateToAsm ((FuncDef fname (TypedVariable itype iname:ts) rettype (Block codeblock)):xs) = 
-  "  .globl " <> fname <> "\n" <> fname <> ":\n" <> "  pushq %rbp\n  pushq %rbx\n" <> "  movq  %rsp, %rbp\n" <> "  movl  %edi, -" <> show isize <> "(%rbp)\n"
-  <> (translateFuncToAsm (M.insert iname (VarLocation isize (-isize)) M.empty) codeblock fname isize (-isize) 1) -- Add input variables onto the stack and into the map, pass correct return type size 
-  <> "  popq  %rbx\n  popq  %rbp\n  ret\n"
-  <> translateToAsm xs
- where isize = sizeOfT itype
-data VarLocation = VarLocation {
-    _varSize :: Int,
-    _varOffset :: Int
-  }
+    DIRECTIVE ("globl " <> fname) 
+  : LABEL fname
+  : PUSH (REG QWORD BP)
+  : PUSH (REG QWORD BX)
+  : MOV  (REG QWORD SP) (REG QWORD BP)
+  : MOV  (REG DWORD DI) (REL QWORD BP (negate isize))
+  : translateFuncToAsm (M.insert iname arg M.empty) codeblock fname isize (-isize) 1
+  ++ (
+      POP (REG QWORD BX)
+    : POP (REG QWORD BP)
+    : RET
+    : translateToAsm xs
+     )
+  where isize = sizeOfT itype
+        arg   = (REL QWORD BP (-isize))
 
-calcExprInAX :: M.Map VarName VarLocation -> Expression -> String
-calcExprInAX _ (EXValue (VInt v)) = "  movl  $" <> show v <> ", %eax\n"
-calcExprInAX varMap (EXVariable vnam) = "  movl  " <> show l <> "(%rbp), %eax\n"
- where (VarLocation _ l) = fromJust $ M.lookup vnam varMap
+calcExprInAX :: M.Map VarName ASMData -> Expression -> [ASMInstruction]
+calcExprInAX _ (EXValue v) = 
+  [ MOV (VAL v) (REG DWORD AX) ]
+calcExprInAX varMap (EXVariable vnam) = 
+  [ MOV varloc (REG DWORD AX) ]
+ where varloc = fromJust $ M.lookup vnam varMap
 calcExprInAX varMap (EXSum exl exr) = 
   calcExprInAX varMap exr
-  <> "  movl  %eax, %ebx\n"
-  <> calcExprInAX varMap exl
-  <> "  addl  %ebx, %eax\n"
+  ++ [ MOV (REG DWORD AX) (REG DWORD BX) ]
+  ++ calcExprInAX varMap exl
+  ++ [ ADD (REG DWORD BX) (REG DWORD AX) ]
 calcExprInAX varMap (EXCmpGreater exl exr) = 
-  calcExprInAX varMap exr 
-  <> "  movl  %eax, %ebx\n"
-  <> calcExprInAX varMap exl
-  <> "  subl  %ebx, %eax\n"
+  calcExprInAX varMap exr
+  ++ [ MOV (REG DWORD AX) (REG DWORD BX) ]
+  ++ calcExprInAX varMap exl
+  ++ [ SUB (REG DWORD BX) (REG DWORD AX) ]
 -- calcExprInAX _ _ = "  TBD <statement>\n"
 
-translateFuncToAsm :: M.Map VarName VarLocation -> [Statement] -> String -> Int -> Int -> Int -> String
-translateFuncToAsm varMap [] fname retsize sp label = ""
+translateFuncToAsm :: M.Map VarName ASMData -> [Statement] -> String -> Int -> Int -> Int -> [ASMInstruction]
+translateFuncToAsm varMap [] fname retsize sp label = []
 translateFuncToAsm varMap ((STLocalVarDef (TypedVariable vartype varname) Nothing):xs) fname retsize sp label = 
-  "  movl  $0,  " <> show newsp <> "(%rbp)\n"
-  <> translateFuncToAsm (M.insert varname (VarLocation (sizeOfT vartype) newsp) varMap) xs fname retsize newsp label
+  MOV (VAL (VInt 0)) varloc
+  : translateFuncToAsm (M.insert varname varloc varMap) xs fname retsize newsp label
  where newsp = sp - (sizeOfT vartype)
+       varloc = REL QWORD BP newsp
 translateFuncToAsm varMap ((STLocalVarDef (TypedVariable vartype varname) (Just expr)):xs) fname retsize sp label = 
   calcExprInAX varMap expr
-  <> "  movl  %eax,  " <> show newsp <> "(%rbp)\n" -- TODO: size suffix
-  <> translateFuncToAsm (M.insert varname (VarLocation (sizeOfT vartype) newsp) varMap) xs fname retsize newsp label
+  ++ [ MOV (REG DWORD AX) varloc ]
+  ++ translateFuncToAsm (M.insert varname varloc varMap) xs fname retsize newsp label
  where newsp = sp - (sizeOfT vartype)
+       varloc = REL QWORD BP newsp
 translateFuncToAsm varMap ((STWhileLoop expr (Block b)):xs) fname retsize sp label = 
-  "  jmp   .L" <> fname <> show label <> "\n"
-  <> ".L" <> fname <> show (label + 1) <> ":\n"
-  <> translateFuncToAsm varMap b fname retsize sp (label + 2)
-  <> ".L" <> fname <> show label <> ":\n"
-  <> calcExprInAX varMap expr
-  <> "  cmpl  $0,  %eax\n"
-  <> "  jg   .L" <> fname <> show (label + 1) <> "\n" 
-  <> translateFuncToAsm varMap xs fname retsize sp (label + 2)
+     JMP (".L" <> fname <> show label)
+  :  LABEL (".L" <> fname <> show (label + 1))
+  :  translateFuncToAsm varMap b fname retsize sp (label + 2)
+  ++ [ LABEL (".L" <> fname <> show label) ]
+  ++ calcExprInAX varMap expr
+  ++ [ CMP (VAL (VInt 0)) (REG DWORD AX) ]
+  ++ [ JG (".L" <> fname <> show (label + 1)) ]
+  ++ translateFuncToAsm varMap xs fname retsize sp (label + 2)
 translateFuncToAsm varMap (STAssignment vnam expr:xs) fname retsize sp label = 
-  calcExprInAX varMap expr
-  <> "  movl  %eax, " <> show l <> "(%rbp)\n"
-  <> translateFuncToAsm varMap xs fname retsize sp label
- where (VarLocation _ l) = fromJust $ M.lookup vnam varMap
+     calcExprInAX varMap expr
+  ++ [ MOV (REG DWORD AX) varloc ]
+  ++ translateFuncToAsm varMap xs fname retsize sp label
+ where varloc = fromJust $ M.lookup vnam varMap
 translateFuncToAsm varMap (STSubtractAssignment vnam expr:xs) fname retsize sp label = 
-  calcExprInAX varMap expr
-  <> "  subl  %eax, " <> show l <> "(%rbp)\n"
-  <> translateFuncToAsm varMap xs fname retsize sp label
- where (VarLocation _ l) = fromJust $ M.lookup vnam varMap
+    calcExprInAX varMap expr
+  ++ [ SUB (REG QWORD AX) varloc ]
+  ++ translateFuncToAsm varMap xs fname retsize sp label
+ where varloc = fromJust $ M.lookup vnam varMap
 translateFuncToAsm varMap (STExpression expr:xs) fname retsize sp label = 
-  calcExprInAX varMap expr
-  <> translateFuncToAsm varMap xs fname retsize sp label
+     calcExprInAX varMap expr
+  ++ translateFuncToAsm varMap xs fname retsize sp label
 -- translateFuncToAsm varMap (x:xs) retsize sp label = 
 --   "  TBD <instruction>\n"
 --   <> translateFuncToAsm varMap xs retsize sp label
@@ -282,4 +374,4 @@ main = do
       case parsed_res of
         Left l -> print l
         Right r -> do
-          putStrLn $ translateToAsm r
+          putStrLn $ concat $ map show $ translateToAsm r
