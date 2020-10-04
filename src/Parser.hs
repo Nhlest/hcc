@@ -27,6 +27,7 @@ parseFile = do
         <|> try (string "-" ) $> Minus
         <|> try (string "+=") $> PlusEquals
         <|> try (string "+" ) $> Plus
+        <|> try (string "*" ) $> Mult
         <|> try (string ">" ) $> Greater
         <|> try (string "<" ) $> Less
         <|> try (string "=" ) $> Equals
@@ -58,6 +59,7 @@ ntok = tokenPrim show update_pos get where
 
 parseType :: String -> Type
 parseType "i32" = TypeI32
+parseType "i64" = TypeI64
 parseType _ = error "TypeParsingErrorStub" -- FIXME: please
 
 parseTokens :: GenParser Token st [FuncDef]
@@ -81,11 +83,11 @@ parseTokens = do
     pure $ FuncDef nam vars retType (Block statements)
 
 parseStatement = do
-  try $ tryParseLocalVarDef
-  <|> tryParseWhileLoop
-  <|> try tryParseAssignment
-  <|> try tryParseSubstractAssignment
-  <|> tryParseSTExpression
+  try tryParseLocalVarDef              <?> "local var declaration"
+  <|> (tryParseWhileLoop               <?> "while loop")
+  <|> (try tryParseAssignment          <?> "assignment")
+  <|> (try tryParseSubstractAssignment <?> "substract assignment")
+  <|> (tryParseSTExpression            <?> "free expression")
 
 tryParseLocalVarDef = do
   tok Local
@@ -127,12 +129,17 @@ tryParseSTExpression = do
 
 tryParseExpression = do
   left <- tryParseValue <|> tryParseVariable
-  tryParseSum left <|> tryParseComparisson left <|> pure left
+  tryParseMul left <|> tryParseSum left <|> tryParseComparisson left <|> pure left
 
 tryParseSum left = do
   tok Plus
   expr <- tryParseExpression
   pure $ EXSum left expr
+
+tryParseMul left = do
+  tok Mult
+  expr <- tryParseExpression
+  pure $ EXMult left expr
 
 tryParseComparisson left = do
   tok Greater

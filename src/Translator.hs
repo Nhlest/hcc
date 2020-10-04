@@ -11,12 +11,14 @@ translateToAsm ((FuncDef fname (TypedVariable itype iname:ts) rettype (Block cod
     DIRECTIVE ("globl " <> fname) 
   : LABEL fname
   : PUSH (REG QWORD BP)
+  : PUSH (REG QWORD DX)
   : PUSH (REG QWORD BX)
   : MOV  (REG QWORD SP) (REG QWORD BP)
   : MOV  (REG DWORD DI) (REL QWORD BP (negate isize))
   : translateFuncToAsm (M.insert iname arg M.empty) codeblock fname isize (-isize) 1
   ++ (
       POP (REG QWORD BX)
+    : POP (REG QWORD DX)
     : POP (REG QWORD BP)
     : RET
     : translateToAsm xs
@@ -35,6 +37,11 @@ calcExprInAX varMap (EXSum exl exr) =
   ++ [ MOV (REG DWORD AX) (REG DWORD BX) ]
   ++ calcExprInAX varMap exl
   ++ [ ADD (REG DWORD BX) (REG DWORD AX) ]
+calcExprInAX varMap (EXMult exl exr) = 
+  calcExprInAX varMap exr
+  ++ [ MOV (REG DWORD AX) (REG DWORD BX) ]
+  ++ calcExprInAX varMap exl
+  ++ [ MUL (REG DWORD BX) ]
 calcExprInAX varMap (EXCmpGreater exl exr) = 
   calcExprInAX varMap exr
   ++ [ MOV (REG DWORD AX) (REG DWORD BX) ]

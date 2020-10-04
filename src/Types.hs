@@ -9,6 +9,7 @@ data Token = Func
               | Semicolon
               | Minus
               | Plus
+              | Mult
               | Greater
               | Less
               | Equals
@@ -22,7 +23,7 @@ data Token = Func
               | PlusEquals
               | Symbol String deriving (Show, Eq)
 
-data Type = TypeI32
+data Type = TypeI32 | TypeI64
  deriving Show
 
 newtype VarName = VarName String
@@ -38,6 +39,7 @@ instance Show Value where
 
 data Expression = EXValue Value
                 | EXSum Expression Expression
+                | EXMult Expression Expression
                 | EXCmpGreater Expression Expression
                 | EXVariable VarName
  deriving Show
@@ -63,6 +65,7 @@ data FuncDef = DummyToken Token
 data ASMRegister = 
     AX
   | BX
+  | DX
   | BP
   | SP
   | DI
@@ -83,6 +86,7 @@ data ASMInstruction =
   | PUSH ASMData
   | JMP  String
   | ADD  ASMData ASMData
+  | MUL  ASMData
   | SUB  ASMData ASMData
   | JG   String
   | CMP  ASMData ASMData
@@ -100,6 +104,7 @@ instance Show ASMRegSize where
 instance Show ASMRegister where
   show AX = "ax"
   show BX = "bx"
+  show DX = "dx"
   show BP = "bp"
   show SP = "sp"
   show DI = "di"
@@ -114,6 +119,7 @@ instance Show ASMInstruction where
   show (PUSH a)   = "  push" <> getSizeSuffix1 a   <> " "  <> show a <> "\n" 
   show (JMP   s)  = "  jmp"  <> "  "  <> s <> "\n" 
   show (ADD  a b) = "  add"  <> getSizeSuffix2 a b <> "  " <> show a <> ", " <> show b <> "\n" 
+  show (MUL  a) = "  mul"  <> getSizeSuffix1 a <> "  " <> show a <> "\n" 
   show (SUB  a b) = "  sub"  <> getSizeSuffix2 a b <> "  " <> show a <> ", " <> show b <> "\n" 
   show (JG   s)   = "  jg"   <> "   " <> s <> "\n" 
   show (CMP  a b) = "  cmp"  <> getSizeSuffix2 a b <> "  " <> show a <> ", " <> show b <> "\n" 
@@ -124,6 +130,7 @@ instance Show ASMInstruction where
 
 sizeOfT :: Type -> Int
 sizeOfT TypeI32 = 4
+sizeOfT TypeI64 = 8
 
 getSizeSuffix :: ASMData -> Maybe String
 getSizeSuffix (REG QWORD _)   = Just "q"
