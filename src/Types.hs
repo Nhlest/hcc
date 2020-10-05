@@ -32,7 +32,7 @@ newtype VarName = VarName String
 data TypedVariable = TypedVariable Type VarName
  deriving Show
 
-data Value = VInt Int
+data Value = VInt Int | VVoid
 
 instance Show Value where
   show (VInt a) = show a
@@ -51,7 +51,7 @@ data Statement = STLocalVarDef TypedVariable (Maybe Expression)
                | STExpression Expression
  deriving Show
 
-data Block = Block [Statement]
+newtype Block = Block [Statement]
  deriving Show
 
 data FuncDef = DummyToken Token
@@ -124,7 +124,7 @@ instance Show ASMInstruction where
   show (JG   s)   = "  jg"   <> "   " <> s <> "\n"
   show (CMP  a b) = "  cmp"  <> getSizeSuffix2 a b <> "  " <> show a <> ", " <> show b <> "\n"
   show (POP  a)   = "  pop"  <> getSizeSuffix1 a   <> "  "  <> show a <> "\n"
-  show (RET)      = "  ret\n"
+  show RET      = "  ret\n"
   show (LABEL s)  = s <> ":\n"
   show (DIRECTIVE s) = "  ." <> s <> "\n"
 
@@ -138,7 +138,7 @@ getSizeSuffix (REG DWORD _)   = Just "l"
 getSizeSuffix (REG WORD  _)   = Just "w"
 getSizeSuffix (REG BYTE  _)   = Just "b"
 getSizeSuffix (VAL (VInt _))  = Just "l"
-getSizeSuffix (REL _ _ _)     = Nothing
+getSizeSuffix REL{}           = Nothing
 
 getSizeSuffix1 :: ASMData -> String
 getSizeSuffix1 = fromJust . getSizeSuffix

@@ -3,25 +3,24 @@ module Parser (tokenizeHCC, parseHCCTokens) where
 import qualified Data.Text    as Text
 import qualified Data.Text.IO as Text
 import Text.ParserCombinators.Parsec
-import Text.Parsec (ParsecT)
 import Data.Functor
 
 import Types
 
 parseFile :: GenParser Char st [Token]
-parseFile = do
-  (flip manyTill) eof $ do
+parseFile =
+  flip manyTill eof $ do
     skipMany $ oneOf " \t\n"
     attemptDigit
       <|> (parseString <$> attemptString)
       <|> attemptSymbol
       <|> eof $> EOF
       <|> fail "Couldnt parse any recognized token"
- where attemptDigit = do
+ where attemptDigit =
          Numeric <$> read <$> many1 digit
-       attemptString = do
+       attemptString =
          many1 alphaNum
-       attemptSymbol = do
+       attemptSymbol =
             try (string ";" ) $> Semicolon
         <|> try (string "-=") $> MinusEquals
         <|> try (string "-" ) $> Minus
@@ -42,18 +41,18 @@ parseFile = do
        parseString "local"  = Local
        parseString s        = Symbol s
 
-tok p = tokenPrim show update_pos get where
+tok p = tokenPrim show updatePos get where
   get a = if p == a then Just (DummyToken p) else Nothing
 
-update_pos :: SourcePos -> Token -> [Token] -> SourcePos
-update_pos pos _ (tok:_) = setSourceLine (incSourceColumn pos 1) 0
-update_pos pos _ [] = pos
+updatePos :: SourcePos -> Token -> [Token] -> SourcePos
+updatePos pos _ (_:_) = setSourceLine (incSourceColumn pos 1) 0
+updatePos pos _ [] = pos
 
-gtok = tokenPrim show update_pos get where
+gtok = tokenPrim show updatePos get where
   get (Symbol a) = Just a
   get _ = Nothing
 
-ntok = tokenPrim show update_pos get where
+ntok = tokenPrim show updatePos get where
   get (Numeric a) = Just a
   get _ = Nothing
 
@@ -63,12 +62,12 @@ parseType "i64" = TypeI64
 parseType _ = error "TypeParsingErrorStub" -- FIXME: please
 
 parseTokens :: GenParser Token st [FuncDef]
-parseTokens = do
+parseTokens =
   many $ do
     tok Func          <?> "func token"
     nam <- gtok       <?> "func name after `func` keyword"
     tok OBracket      <?> "opening bracket after func name"
-    vars <- (many $ do
+    vars <- many (do
       argname <- gtok <?> "argument name"
       tok Colon       <?> "colon after argument name"
       argType <- parseType <$> gtok
@@ -78,12 +77,12 @@ parseTokens = do
     tok CBracket      <?> "closing bracket after argument list"
     tok Colon         <?> "colon after argument list"
     retType <- parseType <$> gtok
-    statements <- between (tok OCurlyBracket) (tok CCurlyBracket) $ do
+    statements <- between (tok OCurlyBracket) (tok CCurlyBracket) $
       many parseStatement
     pure $ FuncDef nam vars retType (Block statements)
 
-parseStatement = do
-  try tryParseLocalVarDef              <?> "local var declaration"
+parseStatement =
+  (try tryParseLocalVarDef             <?> "local var declaration")
   <|> (tryParseWhileLoop               <?> "while loop")
   <|> (try tryParseAssignment          <?> "assignment")
   <|> (try tryParseSubstractAssignment <?> "substract assignment")
@@ -105,7 +104,7 @@ tryParseWhileLoop = do
   tok OBracket
   expr <- tryParseExpression
   tok CBracket
-  statements <- (between (tok OCurlyBracket) (tok CCurlyBracket) $ many parseStatement)
+  statements <- between (tok OCurlyBracket) (tok CCurlyBracket) $ many parseStatement
   pure $ STWhileLoop expr $ Block statements
 
 tryParseAssignment = do
@@ -133,26 +132,21 @@ tryParseExpression = do
 
 tryParseSum left = do
   tok Plus
-  expr <- tryParseExpression
-  pure $ EXSum left expr
+  EXSum left <$> tryParseExpression
 
 tryParseMul left = do
   tok Mult
-  expr <- tryParseExpression
-  pure $ EXMult left expr
+  EXMult left <$> tryParseExpression
 
 tryParseComparisson left = do
   tok Greater
-  expr <- tryParseExpression
-  pure $ EXCmpGreater left expr
+  EXCmpGreater left <$> tryParseExpression
 
-tryParseValue = do
-  number <- ntok
-  pure $ EXValue $ VInt number
+tryParseValue =
+  EXValue . VInt <$> ntok
 
-tryParseVariable = do
-  varname <- gtok
-  pure $ EXVariable (VarName varname)
+tryParseVariable =
+  EXVariable . VarName <$> gtok
 
 tokenizeHCC path = parse parseFile "" <$> Text.unpack <$> Text.readFile path
 

@@ -1,7 +1,5 @@
 module Main where
 
-import qualified Data.Map as M
-
 import Parser ( tokenizeHCC, parseHCCTokens )
 import Translator ( translateToAsm )
 
